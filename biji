@@ -1,0 +1,64 @@
+# rk3128编译6.12内核笔记
+
+## 编译：
+
+cd ~/kernel
+
+
+
+
+export ARCH=arm
+export STAGING_DIR="$HOME/openwrt/staging_dir"
+export CROSS_COMPILE="$HOME/openwrt/staging_dir/toolchain-arm_cortex-a7_gcc-14.3.0_musl_eabi/bin/arm-openwrt-linux-muslgnueabi-"
+
+make rockchip_linux_defconfig
+
+make -j2 rk3128-txcz-rk3128-v3-1.img
+
+
+cp ~/kernel/arch/arm/boot/zImage ~/openwrt-out/linux
+cp ~/kernel/arch/arm/boot/dts/rockchip/rk3128-fireprime.dtb ~/openwrt-out/rk3128-txcz-rk3128-v3-1.dtb
+
+
+
+
+
+## 修改：
+
+CONFIG_RD_LZ4=y
+
+
+
+开启：
+CONFIG_OVERLAY_FS
+
+
+
+
+
+
+
+修改uboot新版本提交
+cd ~/openwrt
+
+FILE=package/boot/uboot-rockchip/Makefile
+
+# 备份原文件
+cp "$FILE" "$FILE.bak-before-fit-fdt-fix"
+
+# 更新源码 commit
+sed -i \
+  's/^PKG_SOURCE_VERSION:=df329e694d6229b56f82bcdf3c5d5a618311f268$/PKG_SOURCE_VERSION:=ea5659f3a4fe8edc2944ad6ebadbaa9a8e9d69b7/' \
+  "$FILE"
+
+# 更新新源码归档 SHA256
+sed -i \
+  's/^PKG_MIRROR_HASH:=41f63af65c47e2078cea6ee2b68380890e8be9fcae7b92812e895b8fc9967764$/PKG_MIRROR_HASH:=5bf09914502e77827ea6bca51f1969318dc58c18343431c8b9cb2e6d0c781a0b/' \
+  "$FILE"
+
+echo "========== 修改结果 =========="
+grep -n -E '^PKG_(VERSION|SOURCE_DATE|SOURCE_VERSION|MIRROR_HASH):=' "$FILE"
+
+echo
+echo "========== 差异检查 =========="
+diff -u "$FILE.bak-before-fit-fdt-fix" "$FILE"
