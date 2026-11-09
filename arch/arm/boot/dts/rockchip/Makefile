@@ -151,6 +151,7 @@ dtb-$(CONFIG_ARCH_ROCKCHIP) += \
 	rk3128-evb-ddr3-v10-linux-spi-nand.dtb \
 	rk3128-evb.dtb \
 	rk3128-xpi-3128.dtb \
+	rk3128-txcz-rk3128-v3-1.dtb \
 	rk3188-bqedison2qc.dtb \
 	rk3188-px3-evb.dtb \
 	rk3188-radxarock.dtb \
