@@ -48,7 +48,7 @@
 	model = "Rockchip RK3128 Fireprime board";
 	compatible = "rockchip,rk3128";
 	chosen {
-		bootargs = "earlycon=uart8250,mmio32,0x20064000 earlyprintk console=ttyFIQ0 rw swiotlb=1 root=PARTUUID=fd800c6c-2fdb-4502-82cb-e61f66b9a221 rootwait";
+		bootargs = "earlycon=uart8250,mmio32,0x20064000 earlyprintk console=ttyFIQ0,115200n8 loglevel=7 swiotlb=1 root=/dev/mmcblk0p2 rootwait rw";
 	};
 
 
