@@ -123,22 +123,34 @@
 
 
 &gmac {
-	phy-mode = "rmii";
-	clock_in_out = "output";
-	tx_delay = <0x30>;
+    phy-mode = "rmii";
+    clock_in_out = "output";
+    tx_delay = <0x30>;
     rx_delay = <0x10>;
-	
-	snps,reset-gpios = <&gpio2 24 GPIO_ACTIVE_LOW>;
-	snps,reset-delays-us = <0 10000 50000>;
-	
-	assigned-clocks = <&cru SCLK_MAC_SRC>;
+
+    phy-supply = <&vcc_phy>;
+    phy-handle = <&phy0>;
+
+    assigned-clocks = <&cru SCLK_MAC_SRC>;
     assigned-clock-rates = <50000000>;
 
-	pinctrl-names = "default";
-	pinctrl-0 = <&rmii_pins>;
+    pinctrl-names = "default";
+    pinctrl-0 = <&rmii_pins>;
 
-	
-	status = "okay";
+    status = "okay";
+};
+
+
+&mdio {
+    phy0: ethernet-phy@1 {
+        compatible = "ethernet-phy-ieee802.3-c22";
+        reg = <1>;
+        max-speed = <100>;
+
+        reset-assert-us = <10000>;
+        reset-deassert-us = <50000>;
+        reset-gpios = <&gpio2 24 GPIO_ACTIVE_LOW>;
+    };
 };
 
 &i2c0 {
