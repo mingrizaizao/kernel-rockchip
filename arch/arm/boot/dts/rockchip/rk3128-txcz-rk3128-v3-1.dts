@@ -45,7 +45,7 @@
 #include "rk3128.dtsi"
 
 / {
-	model = "Rockchip RK3128 Fireprime board";
+	model = "TXCZ RK3128 V3-1";
 	compatible = "rockchip,rk3128";
 	chosen {
 		bootargs = "earlycon=uart8250,mmio32,0x20064000 earlyprintk console=ttyFIQ0,115200n8 loglevel=7 swiotlb=1 root=/dev/mmcblk0p2 rootwait rw";
@@ -128,10 +128,9 @@
 	tx_delay = <0x30>;
     rx_delay = <0x10>;
 	
-	snps,reset-active-low;
-	snps,reset-gpio = <&gpio2 24 GPIO_ACTIVE_LOW>;
+	snps,reset-gpios = <&gpio2 24 GPIO_ACTIVE_LOW>;
 	snps,reset-delays-us = <0 10000 50000>;
-
+	
 	assigned-clocks = <&cru SCLK_MAC_SRC>;
     assigned-clock-rates = <50000000>;
 
