@@ -24,3 +24,5 @@ obj-$(CONFIG_WLAN_VENDOR_ZYDAS) += zydas/
 
 obj-$(CONFIG_WLAN) += virtual/
 obj-$(CONFIG_WL_ROCKCHIP)	+= rockchip_wlan/
+
+obj-$(CONFIG_ESP8089) += esp8089/

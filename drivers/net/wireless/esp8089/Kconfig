@@ -1,0 +1,10 @@
+# SPDX-License-Identifier: GPL-2.0
+
+config ESP8089
+	tristate "Espressif ESP8089 SDIO WiFi support"
+	depends on MMC && MAC80211
+	select WIRELESS_EXT
+	select WEXT_PRIV
+	help
+	  Driver for Espressif ESP8089 SDIO wireless devices.
+	  This driver supports the ESP8089 SDIO interface.
