@@ -1,13 +1,19 @@
-/* Copyright (c) 2008 -2014 Espressif System.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
+/*
+ *  Copyright (c) 2010 - 2014 Espressif System.
  *
  *   Common definitions of Serial Interconnctor Protocol
  *
  *   little endian
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 #ifndef _SIP2_COMMON_H
@@ -89,7 +95,6 @@ enum {
         SIP_EVT_SLEEP,
         SIP_EVT_TXIDLE,
         SIP_EVT_NOISEFLOOR,
-	SIP_EVT_NULLFUNC_REPORT,
         SIP_EVT_MAX
 };
 
@@ -346,8 +351,7 @@ struct sip_evt_bootup2 {
         u8 credit_to_reserve;
         u8 options;
 	s16 noise_floor;
-	u8 mac_type;
-	u8 resv[1];
+	u8 resv[2];
         /* anything else ? */
 } __packed;
 
@@ -430,14 +434,6 @@ struct sip_evt_noisefloor {
      s16 noise_floor;
      u16    pad;
 } __packed;
-
-struct sip_evt_nullfunc_report {
-     u8    ifidx;
-     u8    index;
-     u8    status;
-     u8    pad;
-} __packed;
-
 /*
  *  for mblk direct memory access, no need for sip_hdr. tx: first 2k for contrl msg,
  *  rest of 14k for data.  rx, same.

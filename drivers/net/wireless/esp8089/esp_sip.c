@@ -1,11 +1,17 @@
-/* Copyright (c) 2008 -2014 Espressif System.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
+/*
+ * Copyright (c) 2009 - 2014 Espressif System.
  *
  * Serial Interconnctor Protocol
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 #include <linux/ieee80211.h>
@@ -42,21 +48,15 @@
 
 extern struct completion *gl_bootup_cplx; 
 
+static int old_signal = -35;
 static int avg_signal = 0;
-static int signal_count = 0;
+static int signal_loop = 0;
+
 void reset_signal_count(void)
 {
-	signal_count = 0;
+	signal_loop = 0;
+	avg_signal = 0;
 }
-
-#define SIGNAL_TOTAL_W_SHIFT	8
-#define SIGNAL_TOTAL_W		(1<<SIGNAL_TOTAL_W_SHIFT)
-#define SIGNAL_COUNT_LIMIT	100
-#define SIGNAL_UP_NEW_W_SHIFT	3				/* 8 */ 
-#define SIGNAL_UP_NEW_W		(1<<SIGNAL_UP_NEW_W_SHIFT) 	/* 8 */
-#define SIGNAL_DOWN_NEW_W_SHIFT	0				/* 1 */ 
-#define SIGNAL_DOWN_NEW_W	(1<<SIGNAL_DOWN_NEW_W_SHIFT) 	/* 1 */
-#define SIGNAL_OPT		3
 
 struct esp_mac_prefix esp_mac_prefix_table[] = {
 	{0,{0x18,0xfe,0x34}},
@@ -64,6 +64,7 @@ struct esp_mac_prefix esp_mac_prefix_table[] = {
 	{255,{0x18,0xfe,0x34}},
 };
 
+#define SIGNAL_COUNT  300
 
 #define TID_TO_AC(_tid) ((_tid)== 0||((_tid)==3)?WME_AC_BE:((_tid)<3)?WME_AC_BK:((_tid)<6)?WME_AC_VI:WME_AC_VO)
 
@@ -109,7 +110,7 @@ static struct sip_trace str;
 #define SIP_MIN_DATA_PKT_LEN    (sizeof(struct esp_mac_rx_ctrl) + 24) //24 is min 80211hdr
 
 #ifdef ESP_PREALLOC
-extern struct sk_buff *esp_get_sip_skb(int size, gfp_t type);
+extern struct sk_buff *esp_get_sip_skb(int size);
 extern void esp_put_sip_skb(struct sk_buff **skb);
 
 extern u8 *esp_get_tx_aggr_buf(void);
@@ -212,9 +213,18 @@ static bool check_ac_tid(u8 *pkt, u8 ac, u8 tid)
         return false;
 }
 
-static void sip_recalc_credit_timeout(struct timer_list *t)
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
+static void sip_recalc_credit_timeout(unsigned long data)
+#else
+struct esp_sip *_gsip = NULL;
+static void sip_recalc_credit_timeout(struct timer_list *list)
+#endif
 {
-	struct esp_sip *sip = from_timer(sip, t, credit_timer);
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
+	struct esp_sip *sip = (struct esp_sip *)data;
+#else
+	struct esp_sip *sip = (struct esp_sip *)list->flags;
+#endif
 
 	esp_dbg(ESP_DBG_ERROR, "rct");
 
@@ -224,8 +234,14 @@ static void sip_recalc_credit_timeout(struct timer_list *t)
 static void sip_recalc_credit_init(struct esp_sip *sip)
 {
 	atomic_set(&sip->credit_status, RECALC_CREDIT_DISABLE);  //set it disable
-
+#if LINUX_VERSION_CODE < KERNEL_VERSION(4, 15, 0)
+	init_timer(&sip->credit_timer);
+	sip->credit_timer.data = (unsigned long)sip;
+	sip->credit_timer.function = sip_recalc_credit_timeout;
+#else
+	_gsip = sip;
 	timer_setup(&sip->credit_timer, sip_recalc_credit_timeout, 0);
+#endif
 }
 
 static int sip_recalc_credit_claim(struct esp_sip *sip, int force)
@@ -688,7 +704,7 @@ int sip_rx(struct esp_pub *epub)
          */
         rx_blksz = sif_get_blksz(epub);
 #ifdef ESP_PREALLOC
-        first_skb = esp_get_sip_skb(roundup(first_sz, rx_blksz), GFP_KERNEL);
+        first_skb = esp_get_sip_skb(roundup(first_sz, rx_blksz));
 #else 
         first_skb = __dev_alloc_skb(roundup(first_sz, rx_blksz), GFP_KERNEL);
 #endif /* ESP_PREALLOC */
@@ -833,18 +849,17 @@ int sip_post_init(struct esp_sip *sip, struct sip_evt_bootup2 *bevt)
 
         /* print out MAC addr... */
         memcpy(epub->mac_addr, bevt->mac_addr, ETH_ALEN);
-
-	if (bevt->mac_type == 0) {       /* 24bit */
-        	for(i = 0;i < sizeof(esp_mac_prefix_table)/sizeof(struct esp_mac_prefix);i++) {
-			if(esp_mac_prefix_table[i].mac_index == mac_id) {
-				mac_index = i;
-				break;
-			}
+        for(i = 0;i < sizeof(esp_mac_prefix_table)/sizeof(struct esp_mac_prefix);i++) {
+		if(esp_mac_prefix_table[i].mac_index == mac_id) {
+			mac_index = i;
+			break;
 		}
-        	epub->mac_addr[0] = esp_mac_prefix_table[mac_index].mac_addr_prefix[0];
-        	epub->mac_addr[1] = esp_mac_prefix_table[mac_index].mac_addr_prefix[1];
-        	epub->mac_addr[2] = esp_mac_prefix_table[mac_index].mac_addr_prefix[2];
         }
+
+        epub->mac_addr[0] = esp_mac_prefix_table[mac_index].mac_addr_prefix[0];
+        epub->mac_addr[1] = esp_mac_prefix_table[mac_index].mac_addr_prefix[1];
+        epub->mac_addr[2] = esp_mac_prefix_table[mac_index].mac_addr_prefix[2];
+
 #ifdef SELF_MAC
         epub->mac_addr[0] = 0xff;            
         epub->mac_addr[1] = 0xff;        
@@ -893,9 +908,8 @@ static void sip_write_pkts(struct esp_sip *sip, int pm_state)
 
         sif_unlock_bus(sip->epub);
 
-	if (err) {
-		 esp_sip_dbg(ESP_DBG_ERROR, "func %s err!!!!!!!!!: %d\n", __func__, err);
-	}
+	if (err)
+		esp_sip_dbg(ESP_DBG_ERROR, "func %s err!!!!!!!!!: %d\n", __func__, err);
 
 }
 
@@ -941,7 +955,7 @@ static int sip_pack_pkt(struct esp_sip *sip, struct sk_buff *skb, int *pm_state)
 
                 /* make room for encrypted pkt */
                 if (itx_info->control.hw_key) {
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39))
                         shdr->d_enc_flag= itx_info->control.hw_key->alg+1;
 #else
                         int alg = esp_cipher2alg(itx_info->control.hw_key->cipher);
@@ -1083,8 +1097,12 @@ sip_after_tx_status_update(struct esp_sip *sip)
 {
         if (atomic_read(&sip->data_tx_stopped) == true && sip_tx_data_may_resume(sip)) {
                 atomic_set(&sip->data_tx_stopped, false);
-                esp_sip_dbg(ESP_DBG_TRACE, "%s trigger txq \n", __func__);
-                sip_trigger_txq_process(sip);
+                if (sip_is_tx_mblk_avail(sip) == false) {
+                        esp_sip_dbg(ESP_DBG_ERROR, "%s mblk still unavail \n", __func__);
+                } else {
+                        esp_sip_dbg(ESP_DBG_TRACE, "%s trigger txq \n", __func__);
+                        sip_trigger_txq_process(sip);
+                }
         } else if (!sip_tx_data_may_resume(sip)) { //JLU: this is redundant
                 STRACE_SHOW(sip);
         }
@@ -1116,7 +1134,7 @@ static void sip_set_tx_rate_status(struct sip_rc_status *rcstatus, struct ieee80
 #endif /* HOST_RC */
 
 #ifndef FAST_TX_STATUS
-void
+static void
 sip_txdoneq_process(struct esp_sip *sip, struct sip_evt_tx_report *tx_report)
 {
         struct sk_buff *skb, *tmp;
@@ -1159,7 +1177,7 @@ sip_txdoneq_process(struct esp_sip *sip, struct sip_evt_tx_report *tx_report)
                                 tx_info->status.rates[1].idx = -1;
 #endif /* HOST_RC */
 
-                                ieee80211_tx_status_ni(epub->hw, skb);
+				ieee80211_tx_status_irqsafe(epub->hw, skb);
                                 matchs++;
                                 atomic_dec(&sip->pending_tx_status);
                                 STRACE_RX_TXSTATUS_INC();
@@ -1184,7 +1202,7 @@ sip_txdoneq_process(struct esp_sip *sip)
         struct esp_pub *epub = sip->epub;
         struct sk_buff *skb;
         while ((skb = skb_dequeue(&epub->txdoneq))) {
-                ieee80211_tx_status(epub->hw, skb);
+			ieee80211_tx_status_irqsafe(epub->hw, skb);
         }
 }
 #endif
@@ -1212,7 +1230,7 @@ static void sip_tx_status_report(struct esp_sip *sip, struct sk_buff *skb, struc
 
         } else {
                 tx_info->flags |= IEEE80211_TX_STAT_AMPDU | IEEE80211_TX_STAT_ACK;
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 37))
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 39))
                 tx_info->status.ampdu_ack_map = 1;
 #else
                 tx_info->status.ampdu_len = 1;
@@ -1272,7 +1290,7 @@ static void sip_tx_status_report(struct esp_sip *sip, struct sk_buff *skb, struc
 				}
                                 if(node->sta == NULL)
                                         goto _exit;
-				if(!sta->deflink.ht_cap.ht_supported)
+				if(!sta->ht_cap.ht_supported)
 					goto _exit;
 #else
                                 node = esp_get_node_by_addr(sip->epub, wh->addr1);
@@ -1292,7 +1310,7 @@ static void sip_tx_status_report(struct esp_sip *sip, struct sk_buff *skb, struc
                                 if ((tid->state == ESP_TID_STATE_INIT) && 
 						(TID_TO_AC(tidno) != WME_AC_VO) && tid->cnt >= 10) {
                                         tid->state = ESP_TID_STATE_TRIGGER;
-                                        esp_sip_dbg(ESP_DBG_ERROR, "start tx ba session,addr:%pM,tid:%u\n", wh->addr1, tidno);
+                                        esp_sip_dbg(ESP_DBG_TRACE, "start tx ba session,addr:%pM,tid:%u\n", wh->addr1, tidno);
                                         spin_unlock_bh(&sip->epub->tx_ampdu_lock);
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 28))
                                         ieee80211_start_tx_ba_session(sip->epub->hw, wh->addr1, tidno);
@@ -1317,7 +1335,7 @@ _exit:
 #ifndef FAST_TX_NOWAIT 
         skb_queue_tail(&sip->epub->txdoneq, skb);
 #else
-        ieee80211_tx_status(sip->epub->hw, skb);
+		ieee80211_tx_status_irqsafe(sip->epub->hw, skb);
 #endif
 }
 #endif /* FAST_TX_STATUS */
@@ -1442,8 +1460,8 @@ sip_txq_process(struct esp_pub *epub)
 static void sip_after_write_pkts(struct esp_sip *sip)
 {
 
-#if defined(FAST_TX_STATUS) && !defined(FAST_TX_NOWAIT)
-		sip_txdoneq_process(sip);
+#ifndef FAST_TX_NOWAIT
+        sip_txdoneq_process(sip);
 #endif
         //disable tx_data
 #ifndef FAST_TX_STATUS
@@ -1573,29 +1591,6 @@ static int esp_add_wmm(struct sk_buff *skb)
 }
 #endif /* NO_WMM_DUMMY */
 
-static int update_sta_time_remain(struct esp_pub *epub, struct sk_buff *skb)
-{
-	struct ieee80211_hdr * wh;
-	struct esp_node *enode;
-
-	if (!epub || !skb)
-		return -EINVAL;
-
-	if (epub->master_ifidx == ESP_PUB_MAX_VIF)   /* no vif in ap mode */
-		return 0;
-
-	wh = (struct ieee80211_hdr *)skb->data;
-	enode = esp_get_node_by_addr(epub, wh->addr2); /* src addr */
-
-	if (enode && enode->ifidx == epub->master_ifidx) {
-		atomic_set(&enode->time_remain, ESP_ND_TIME_REMAIN_MAX);
-		atomic_set(&enode->sta_state, ESP_STA_STATE_NORM);
-		atomic_set(&enode->loss_count, 0);
-		esp_dbg(ESP_DBG_TRACE, "update %d", enode->index);
-	}
-	return 0;
-}
-
 /*  parse mac_rx_ctrl and return length */
 static int sip_parse_mac_rx_info(struct esp_sip *sip, struct esp_mac_rx_ctrl * mac_ctrl, struct sk_buff *skb)
 {
@@ -1607,7 +1602,6 @@ static int sip_parse_mac_rx_info(struct esp_sip *sip, struct esp_mac_rx_ctrl * m
 #else
         rx_status = (struct ieee80211_rx_status *)skb->cb;
 #endif
-        memset(rx_status, 0, sizeof(*rx_status));
         rx_status->freq = esp_ieee2mhz(mac_ctrl->channel);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 39))
@@ -1618,17 +1612,17 @@ static int sip_parse_mac_rx_info(struct esp_sip *sip, struct esp_mac_rx_ctrl * m
 
 	hdr = (struct ieee80211_hdr *)skb->data;
 	if (mac_ctrl->damatch0 == 1 && mac_ctrl->bssidmatch0 == 1        /*match bssid and da, but beacon package contain other bssid*/
-			 && memcmp(hdr->addr2, sip->epub->wl.bssid, ETH_ALEN) == 0) { /* force match addr2 */
-		if (signal_count >= SIGNAL_COUNT_LIMIT) {
-			if (rx_status->signal < avg_signal)
-				avg_signal = (((avg_signal<<SIGNAL_TOTAL_W_SHIFT)-(avg_signal<<SIGNAL_DOWN_NEW_W_SHIFT)) + (rx_status->signal<<SIGNAL_DOWN_NEW_W_SHIFT))>>SIGNAL_TOTAL_W_SHIFT;
-			else
-				avg_signal = (((avg_signal<<SIGNAL_TOTAL_W_SHIFT)-(avg_signal<<SIGNAL_UP_NEW_W_SHIFT)) + (rx_status->signal<<SIGNAL_UP_NEW_W_SHIFT))>>SIGNAL_TOTAL_W_SHIFT;
+			 && strncmp(hdr->addr2, sip->epub->wl.bssid, ETH_ALEN) == 0) { /* force match addr2 */
+		if (++signal_loop >= SIGNAL_COUNT) {
+			avg_signal += rx_status->signal;
+			avg_signal /= SIGNAL_COUNT;
+			old_signal = rx_status->signal = (avg_signal + 5);
+			signal_loop = 0;
+			avg_signal = 0;
 		} else {
-			signal_count++;
-			avg_signal = (avg_signal*(signal_count-1) + rx_status->signal)/signal_count;
+			avg_signal += rx_status->signal;
+			rx_status->signal = old_signal;
 		}
-		rx_status->signal = avg_signal + SIGNAL_OPT;
 	}
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 35))
@@ -1642,15 +1636,27 @@ static int sip_parse_mac_rx_info(struct esp_sip *sip, struct esp_mac_rx_ctrl * m
 #undef ESP_RSSI_MIN_RSSI
 #endif /* !NEW_KERNEL && KERNEL_35*/
         rx_status->antenna = 0;  /* one antenna for now */
-        rx_status->band = NL80211_BAND_2GHZ;
+	rx_status->band = NL80211_BAND_2GHZ;
         rx_status->flag = RX_FLAG_DECRYPTED | RX_FLAG_MMIC_STRIPPED;
         if (mac_ctrl->sig_mode) {
+            // 2.6.27 has RX_FLAG_RADIOTAP in enum mac80211_rx_flags in include/net/mac80211.h
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 29))                
+# if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0))
+                rx_status->flag |= RX_FLAG_HT;
+# else
                 rx_status->encoding = RX_ENC_HT;
+# endif
                 rx_status->rate_idx = mac_ctrl->MCS;
-                if (mac_ctrl->SGI)
+                if(mac_ctrl->SGI)
+# if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 12, 0))
+                        rx_status->flag |= RX_FLAG_SHORT_GI;
+# else
                         rx_status->enc_flags |= RX_ENC_FLAG_SHORT_GI;
+# endif
+#else
+                rx_status->rate_idx = esp_wmac_rate2idx(0xc);//ESP_RATE_54
+#endif
         } else {
-                rx_status->encoding = RX_ENC_LEGACY;
                 rx_status->rate_idx = esp_wmac_rate2idx(mac_ctrl->rate);
         }
         if (mac_ctrl->rxend_state == RX_FCS_ERR)
@@ -1671,8 +1677,6 @@ static int sip_parse_mac_rx_info(struct esp_sip *sip, struct esp_mac_rx_ctrl * m
 
         do {
                 struct ieee80211_hdr * wh = (struct ieee80211_hdr *)((u8 *)skb->data);
-
-		update_sta_time_remain(sip->epub, skb);
 
 #ifndef NO_WMM_DUMMY
 		if (ieee80211_is_mgmt(wh->frame_control))
@@ -2210,16 +2214,9 @@ sip_poll_bootup_event(struct esp_sip *sip)
 		esp_dbg(ESP_DBG_ERROR, "bootup event timeout\n");
 		return -ETIMEDOUT;
 	}	
-	if(sif_get_ate_config() == 0
-#if defined(CONFIG_DEBUG_FS) && defined(DEBUGFS_BOOTMODE)
-		&& dbgfs_get_bootmode_var(DBGFS_FCC_MODE) == 0
 
-#endif
-#ifdef ESP_CLASS
-		&& sif_get_fccmode() == 0
-#endif
-	) {
-		 ret = esp_register_mac80211(sip->epub);
+	if(sif_get_ate_config() == 0){
+		ret = esp_register_mac80211(sip->epub);
 	}
 
 #ifdef TEST_MODE
@@ -2362,15 +2359,6 @@ void sip_tx_data_pkt_enqueue(struct esp_pub *epub, struct sk_buff *skb)
 		}
 
 	}
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 32)
-        if(sif_get_ate_config() == 0){
-            ieee80211_queue_work(epub->hw, &epub->tx_work);
-        } else {
-            queue_work(epub->esp_wkq, &epub->tx_work);
-        } 
-#else       
-        queue_work(epub->esp_wkq, &epub->tx_work);
-#endif
 }
 
 #ifdef FPGA_TXDATA

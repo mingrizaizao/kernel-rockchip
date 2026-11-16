@@ -1,12 +1,17 @@
-/* Copyright (c) 2008 -2014 Espressif System.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
+/*
+ * Copyright (c) 2010 -2014 Espressif System.
  *
  *   file operation in kernel space
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 #ifndef _ESP_FILE_H_
@@ -48,10 +53,9 @@ struct esp_init_table_elem {
 	short value;
 };
 
+int request_init_conf(void);
 int esp_atoi(char *str);
 void show_esp_init_table(struct esp_init_table_elem *econf);
-
-int request_init_conf(void);
 void fix_init_data(u8 *init_data_buf, int buf_size);
 
 
@@ -61,57 +65,6 @@ extern int logger_write( const unsigned char prio,
                          const char __kernel * const fmt,
                          ...);
 
-#endif
-
-#if (defined(CONFIG_DEBUG_FS) && defined(DEBUGFS_BOOTMODE)) || defined(ESP_CLASS)
-
-#define FCC_MODE_ID_MASK		0x000000ff
-#define FCC_MODE_ID_SHIFT		0
-#define FM_GET_ID(mode) ((mode&FCC_MODE_ID_MASK)>>FCC_MODE_ID_SHIFT)
-/* fcc tx / fcc continue tx */
-#define FCC_MODE_CHANNEL_MASK		0x0000ff00
-#define FCC_MODE_CHANNEL_SHIFT		8
-#define FM_GET_CHANNEL(mode) ((mode&FCC_MODE_CHAN_MASK)>>FCC_MODE_CHANNEL_SHIFT)
-#define FCC_MODE_RATE_OFFSET_MASK	0x00ff0000
-#define FCC_MODE_RATE_OFFSET_SHIFT	16
-#define FM_GET_RATE_OFFSET(mode) ((mode&FCC_MODE_RATE_OFFSET_MASK)>>FCC_MODE_RATE_OFFSET_SHIFT)
-
-typedef enum FCC_MODE_ID {
-	FCC_MODE_ILDE = 0,
-	FCC_MODE_SELFTEST = 1,
-	FCC_MODE_CONT_TX,
-	FCC_MODE_NORM_TX,
-	FCC_MODE_SDIO_NOISE,
-	FCC_MODE_MAX,
-} FCC_MODE_ID_t;
-
-
-/* little ending: 
- * low bit <-- --> high bit *
- * id channel rate reserve  */
-struct fcc_mode {
-	u8 id;
-	union {
-		struct {
-			u8 reserve[3];
-		} fcc_selftest;
-		struct {
-			u8 channel;
-			u8 rate_offset;
-			u8 reserve;
-		} fcc_norm_tx;
-		struct {
-			u8 channel;
-			u8 rate_offset;
-			u8 reserve;
-		} fcc_cont_tx;
-	} u;
-} __packed;
-#endif /* FCC */
-
-#ifdef ESP_CLASS
-int esp_class_init(void);	
-void esp_class_deinit(void);
 #endif
 
 #endif /* _ESP_FILE_H_ */

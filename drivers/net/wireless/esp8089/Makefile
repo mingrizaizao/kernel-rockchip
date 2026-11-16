@@ -2,7 +2,9 @@
 
 obj-$(CONFIG_ESP8089) += esp8089.o
 
-ccflags-y += -DP2P_CONCURRENT -DESP_ACK_INTERRUPT -DESP_USE_SDIO
+ccflags-y += -DDEBUG -DSIP_DEBUG -DFAST_TX_STATUS -DKERNEL_IV_WAR \
+	-DRX_SENDUP_SYNC -DDEBUG_FS -DSIF_DSR_WAR -DHAS_INIT_DATA -DHAS_FW \
+	-DP2P_CONCURRENT -DESP_USE_SDIO
 esp8089-y := esp_init.o
 esp8089-y += esp_debug.o
 esp8089-y += sdio_sif_esp.o

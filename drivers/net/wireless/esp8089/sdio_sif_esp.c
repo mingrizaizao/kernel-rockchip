@@ -1,14 +1,19 @@
-/* Copyright (c) 2008 -2014 Espressif System.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
+/*
+ * Copyright (c) 2010 -2013 Espressif System.
  *
  *   sdio serial i/f driver
  *    - sdio device control routines
  *    - sync/async DMA/PIO read/write
  *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 #ifdef ESP_USE_SDIO
 #include <linux/mmc/card.h>
@@ -23,6 +28,7 @@
 #include <net/mac80211.h>
 #include <linux/time.h>
 #include <linux/pm.h>
+#include <linux/platform_device.h>
 
 #include "esp_pub.h"
 #include "esp_sif.h"
@@ -37,6 +43,7 @@
 #endif /* USE_EXT_GPIO */
 
 
+
 #define ESP_DMA_IBUFSZ   2048
 
 //unsigned int esp_msg_level = 0;
@@ -46,6 +53,24 @@ static struct semaphore esp_powerup_sem;
 
 static enum esp_sdio_state sif_sdio_state;
 struct esp_sdio_ctrl *sif_sctrl = NULL;
+
+static int sif_reset_rk3128_sdio_host(void)
+{
+	struct device *dev;
+	int ret;
+
+	dev = bus_find_device_by_name(&platform_bus_type, NULL, "10218000.mmc");
+	if (!dev)
+		return -ENODEV;
+	device_release_driver(dev);
+	msleep(100);
+	ret = device_attach(dev);
+	put_device(dev);
+	if (ret <= 0)
+		return ret ? ret : -ENODEV;
+	msleep(500);
+	return 0;
+}
 
 #ifdef ESP_ANDROID_LOGGER
 bool log_off = false;
@@ -602,6 +627,8 @@ static int esp_sdio_probe(struct sdio_func *func, const struct sdio_device_id *i
 		esp_dbg(ESP_DBG_ERROR, "first normal exit\n");
 		sif_sdio_state = ESP_SDIO_STATE_FIRST_NORMAL_EXIT;
 		up(&esp_powerup_sem);
+	} else if (sif_sdio_state == ESP_SDIO_STATE_SECOND_INIT) {
+		up(&esp_powerup_sem);
 	}
 
         return err;
@@ -629,6 +656,7 @@ _err_first_init:
 _err_second_init:
 	sif_sdio_state = ESP_SDIO_STATE_SECOND_ERROR_EXIT;
 	esp_sdio_remove(func);
+	up(&esp_powerup_sem);
 	return err;
 }
 
@@ -764,106 +792,80 @@ static struct sdio_driver esp_sdio_driver = {
                 .drv = { .pm = &esp_sdio_pm_ops, },
 };
 
-static int esp_sdio_dummy_probe(struct sdio_func *func, const struct sdio_device_id *id)
-{
-        esp_dbg(ESP_DBG_ERROR, "%s enter\n", __func__);
-
-        up(&esp_powerup_sem);
-        
-        return 0;
-}
-
-static void esp_sdio_dummy_remove(struct sdio_func *func) 
-{
-        return;
-}
-
-static struct sdio_driver esp_sdio_dummy_driver = {
-                .name = "eagle_sdio_dummy",
-                .id_table = esp_sdio_devices,
-                .probe = esp_sdio_dummy_probe,
-                .remove = esp_sdio_dummy_remove,
-};
-
 int esp_sdio_init(void) 
 {
 #define ESP_WAIT_UP_TIME_MS 11000
         int err;
-        int retry = 3;
-        bool powerup = false;
-
+        u64 ver;
         esp_dbg(ESP_DBG_TRACE, "%s \n", __func__);
 
+#ifdef DRIVER_VER
+		ver = DRIVER_VER;
+        esp_dbg(ESP_SHOW, "\n***** EAGLE DRIVER VER:%llx*****\n\n", ver);
+#endif
         esp_wakelock_init();
         esp_wake_lock();
 
-        do {
-                sema_init(&esp_powerup_sem, 0);
-
-                sif_platform_target_poweron();
-
-                sif_platform_rescan_card(1);
-
-                err = sdio_register_driver(&esp_sdio_dummy_driver);
-                if (err) {
-                        esp_dbg(ESP_DBG_ERROR, "eagle sdio driver registration failed, error code: %d\n", err);
-                        goto _fail;
-                }
-
-                if (down_timeout(&esp_powerup_sem,
-                                 msecs_to_jiffies(ESP_WAIT_UP_TIME_MS)) == 0) 
-		{
-
-                        powerup = true;
-			msleep(200);
-                        break;
-                }
-
-                esp_dbg(ESP_SHOW, "%s ------ RETRY ------ \n", __func__);
-
-		sif_record_retry_config();
-
-                sdio_unregister_driver(&esp_sdio_dummy_driver);
-
-                sif_platform_rescan_card(0);
-                
-                sif_platform_target_poweroff();
-                
-        } while (retry--);
-
-        if (!powerup) {
-                esp_dbg(ESP_DBG_ERROR, "eagle sdio can not power up!\n");
-
-                err = -ENODEV;
-                goto _fail;
-        }
-
-        esp_dbg(ESP_SHOW, "%s power up OK\n", __func__);
-
-        sdio_unregister_driver(&esp_sdio_dummy_driver);
-        
         sif_sdio_state = ESP_SDIO_STATE_FIRST_INIT;
 	sema_init(&esp_powerup_sem, 0);
-
-        sdio_register_driver(&esp_sdio_driver);
-
-        if ((down_timeout(&esp_powerup_sem,
-                                 msecs_to_jiffies(ESP_WAIT_UP_TIME_MS)) == 0 ) && sif_get_ate_config() == 0) {
-		if(sif_sdio_state == ESP_SDIO_STATE_FIRST_NORMAL_EXIT){
-                	sdio_unregister_driver(&esp_sdio_driver);
-
-                	sif_platform_rescan_card(0);
-
-			msleep(100);
-                
-			sif_platform_rescan_card(1);
-
-			sif_sdio_state = ESP_SDIO_STATE_SECOND_INIT;
-        	
-			sdio_register_driver(&esp_sdio_driver);
+	err = sif_reset_rk3128_sdio_host();
+	if (err)
+		goto _fail;
+	/* The SDIO function is already enumerated on this board. Bind the real
+	 * driver directly instead of relying on Rockchip's unavailable power/card
+	 * detect hooks and the legacy dummy-driver cycle.
+	 */
+	err = sdio_register_driver(&esp_sdio_driver);
+	if (err)
+		goto _fail;
+	if (down_timeout(&esp_powerup_sem,
+			 msecs_to_jiffies(ESP_WAIT_UP_TIME_MS))) {
+		err = -ETIMEDOUT;
+		sdio_unregister_driver(&esp_sdio_driver);
+		goto _fail;
+	}
+	if (sif_sdio_state != ESP_SDIO_STATE_FIRST_NORMAL_EXIT) {
+		err = -EIO;
+		sdio_unregister_driver(&esp_sdio_driver);
+		goto _fail;
+	}
+	/* The first firmware stage only resets the target. Rebind once in
+	 * SECOND_INIT so the target boots the operational firmware and emits the
+	 * boot event that registers the mac80211 PHY.
+	 */
+	{
+		struct device *host_dev = get_device(sif_sctrl->func->card->host->parent);
+		if (!host_dev) {
+			err = -ENODEV;
+			sdio_unregister_driver(&esp_sdio_driver);
+			goto _fail;
 		}
-                
-        }
+		sdio_unregister_driver(&esp_sdio_driver);
+		/* Reinitialize the non-removable SDIO host to reset the ESP chip
+		 * between firmware stages. The board's legacy card-detect hook is
+		 * unavailable on this OpenWrt device.
+		 */
+		device_release_driver(host_dev);
+		sif_sdio_state = ESP_SDIO_STATE_SECOND_INIT;
+		err = device_attach(host_dev);
+		put_device(host_dev);
+		if (err < 0)
+			goto _fail;
+	}
+	sema_init(&esp_powerup_sem, 0);
+	err = sdio_register_driver(&esp_sdio_driver);
+	if (err)
+		goto _fail;
+	if (down_timeout(&esp_powerup_sem,
+			 msecs_to_jiffies(ESP_WAIT_UP_TIME_MS))) {
+		err = -ETIMEDOUT;
+		goto _fail;
+	}
+	if (sif_sdio_state != ESP_SDIO_STATE_SECOND_INIT) {
+		err = -EIO;
+		goto _fail;
+	}
+	err = 0;
 
 
         esp_register_early_suspend();
@@ -880,6 +882,8 @@ _fail:
 void esp_sdio_exit(void) 
 {
 	esp_dbg(ESP_SHOW, "%s \n", __func__);
+
+	esp_debugfs_exit();
 	
         esp_unregister_early_suspend();
 
