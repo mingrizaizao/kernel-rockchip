@@ -98,16 +98,6 @@
 		regulator-always-on;
 	};
 
-	vcc_otg_vbus: otg-vbus-regulator {
-		compatible = "regulator-fixed";
-		gpio = <&gpio0 RK_PD6 GPIO_ACTIVE_HIGH>;
-		pinctrl-names = "default";
-		pinctrl-0 = <&otg_vbus_drv>;
-		regulator-name = "vcc_otg_vbus";
-		regulator-min-microvolt = <5000000>;
-		regulator-max-microvolt = <5000000>;
-		enable-active-high;
-	};
 
 	xin32k: xin32k {
 		compatible = "fixed-clock";
@@ -383,9 +373,6 @@
 			rockchip,pins = <3 RK_PC4 RK_FUNC_GPIO &pcfg_pull_none>;
 		};
 
-		otg_vbus_drv: otg-vbus-drv {
-			rockchip,pins = <0 RK_PD6 RK_FUNC_GPIO &pcfg_pull_none>;
-		};
 	};
 };
 
@@ -402,21 +389,22 @@
 };
 
 &sdio {
-	cap-mmc-highspeed;
-	no-sd;
-	no-mmc;
-	ignore-pm-notify;
-	keep-power-in-suspend;
-	non-removable;
-	cap-sdio-irq;
-	status = "disabled";
+        cap-mmc-highspeed;
+        no-sd;
+        no-mmc;
+        ignore-pm-notify;
+        keep-power-in-suspend;
+        non-removable;
+        cap-sdio-irq;
+        clock-freq-min-max = <200000 37500000>;
+        max-frequency = <37500000>;
+        status = "okay";
 };
 
 &u2phy {
 	status = "okay";
 
 	u2phy_otg: otg-port {
-		vbus-supply = <&vcc_otg_vbus>;
 		status = "okay";
 	};
 
