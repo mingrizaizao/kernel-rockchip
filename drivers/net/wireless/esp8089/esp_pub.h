@@ -56,7 +56,7 @@ enum sta_state {
 	
 
 #define ESP_LOSS_COUNT_MAX	5
-#define ESP_ND_TIME_REMAIN_MAX	11   /* 12*500ms 6000ms (12-1)*/
+#define ESP_ND_TIME_REMAIN_MAX	599  /* ~300s at the 500ms monitor interval */
 #define ESP_ND_TIME_REMAIN_MIN	0    /* immediate */
 #define ESP_ND_TIMER_INTERVAL	500  /* 500ms */
 #define WME_NUM_TID 16
