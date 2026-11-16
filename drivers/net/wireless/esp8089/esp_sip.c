@@ -1591,6 +1591,29 @@ static int esp_add_wmm(struct sk_buff *skb)
 }
 #endif /* NO_WMM_DUMMY */
 
+/* Refresh the AP-side station liveness timer for every received frame. */
+static int update_sta_time_remain(struct esp_pub *epub, struct sk_buff *skb)
+{
+	struct ieee80211_hdr *wh;
+	struct esp_node *enode;
+
+	if (!epub || !skb || skb->len < sizeof(*wh))
+		return -EINVAL;
+
+	if (epub->master_ifidx == ESP_PUB_MAX_VIF)
+		return 0;
+
+	wh = (struct ieee80211_hdr *)skb->data;
+	enode = esp_get_node_by_addr(epub, wh->addr2);
+	if (enode && enode->ifidx == epub->master_ifidx) {
+		atomic_set(&enode->time_remain, ESP_ND_TIME_REMAIN_MAX);
+		atomic_set(&enode->sta_state, ESP_STA_STATE_NORM);
+		atomic_set(&enode->loss_count, 0);
+	}
+
+	return 0;
+}
+
 /*  parse mac_rx_ctrl and return length */
 static int sip_parse_mac_rx_info(struct esp_sip *sip, struct esp_mac_rx_ctrl * mac_ctrl, struct sk_buff *skb)
 {
@@ -1677,6 +1700,8 @@ static int sip_parse_mac_rx_info(struct esp_sip *sip, struct esp_mac_rx_ctrl * m
 
         do {
                 struct ieee80211_hdr * wh = (struct ieee80211_hdr *)((u8 *)skb->data);
+
+		update_sta_time_remain(sip->epub, skb);
 
 #ifndef NO_WMM_DUMMY
 		if (ieee80211_is_mgmt(wh->frame_control))
