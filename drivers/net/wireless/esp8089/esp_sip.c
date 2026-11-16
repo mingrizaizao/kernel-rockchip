@@ -2384,6 +2384,10 @@ void sip_tx_data_pkt_enqueue(struct esp_pub *epub, struct sk_buff *skb)
 		}
 
 	}
+	if (sif_get_ate_config() == 0)
+		ieee80211_queue_work(epub->hw, &epub->tx_work);
+	else
+		queue_work(epub->esp_wkq, &epub->tx_work);
 }
 
 #ifdef FPGA_TXDATA
