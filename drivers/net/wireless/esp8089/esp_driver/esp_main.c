@@ -37,12 +37,23 @@ struct completion *gl_bootup_cplx = NULL;
 static int esp_download_fw(struct esp_pub * epub);
 #endif /* !FGPA_DEBUG */
 
-static int modparam_no_txampdu = 0;
-static int modparam_no_rxampdu = 0;
+/*
+ * This SDIO-attached ESP8089 is more reliable on RK3128 when BA aggregation
+ * and short-GI HT rates are avoided. Keep HT enabled by default, and leave the
+ * emergency legacy-only switch available as a module parameter.
+ */
+static int modparam_no_txampdu = 1;
+static int modparam_no_rxampdu = 1;
+static int modparam_disable_ht;
+static int modparam_ht_mcs_mask = 0xff;
 module_param_named(no_txampdu, modparam_no_txampdu, int, 0444);
 MODULE_PARM_DESC(no_txampdu, "Disable tx ampdu.");
 module_param_named(no_rxampdu, modparam_no_rxampdu, int, 0444);
 MODULE_PARM_DESC(no_rxampdu, "Disable rx ampdu.");
+module_param_named(disable_ht, modparam_disable_ht, int, 0444);
+MODULE_PARM_DESC(disable_ht, "Disable 802.11n/HT and force legacy rates.");
+module_param_named(ht_mcs_mask, modparam_ht_mcs_mask, int, 0444);
+MODULE_PARM_DESC(ht_mcs_mask, "HT MCS0-7 bitmap to advertise, default 0xff.");
 
 static char *modparam_eagle_path = "";
 module_param_named(eagle_path, modparam_eagle_path, charp, 0444);
@@ -56,6 +67,16 @@ bool mod_support_no_txampdu()
 bool mod_support_no_rxampdu()
 {
         return modparam_no_rxampdu;
+}
+
+bool mod_support_disable_ht(void)
+{
+        return modparam_disable_ht;
+}
+
+u8 mod_support_ht_mcs_mask(void)
+{
+        return modparam_ht_mcs_mask & 0xff;
 }
 
 void mod_support_no_txampdu_set(bool value)
@@ -140,11 +161,11 @@ int esp_pub_init_all(struct esp_pub *epub)
 		ret = sip_poll_bootup_event(epub->sip);
 	} else {
 		ret = sip_poll_resetting_event(epub->sip);
-        if (ret == 0) {
-            sif_lock_bus(epub);
-            sif_interrupt_target(epub, 7);
-            sif_unlock_bus(epub);
-        }
+		if (ret == 0) {
+			sif_lock_bus(epub);
+			sif_interrupt_target(epub, 7);
+			sif_unlock_bus(epub);
+		}
 		
 	}
 
@@ -267,7 +288,3 @@ _err:
 
 }
 #endif /* !FPGA_DEBUG */
-
-
-
-

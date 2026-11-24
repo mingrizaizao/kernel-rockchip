@@ -105,6 +105,17 @@
 		clock-output-names = "xin32k";
 		#clock-cells = <0>;
 	};
+
+	wireless-wlan {
+		compatible = "wlan-platdata";
+		rockchip,grf = <&grf>;
+		wifi_chip_type = "esp8089";
+		wifi_sdio_host = <&sdio>;
+		sdio_vref = <0>;
+		WIFI,poweren-gpios = <&gpio0 RK_PD6 GPIO_ACTIVE_HIGH>;
+		WIFI,host_wake-gpios = <&gpio0 RK_PA2 GPIO_ACTIVE_HIGH>;
+		status = "okay";
+	};
 };
 
 &cpu0 {
@@ -129,7 +140,6 @@
 
     status = "okay";
 };
-
 
 &mdio {
     phy0: ethernet-phy@1 {
@@ -361,6 +371,7 @@
 	};
 };
 
+
 &pinctrl {
 	pmic {
 		pmic_int_l: pmic-int-l {
@@ -374,6 +385,19 @@
 		};
 
 	};
+
+    sdio {
+        sdio_gpio_idle: sdio-gpio-idle {
+            rockchip,pins =
+                <0 RK_PD6 RK_FUNC_GPIO &pcfg_pull_default>,
+                <0 RK_PA3 RK_FUNC_GPIO &pcfg_pull_default>,
+                <1 RK_PA0 RK_FUNC_GPIO &pcfg_pull_default>,
+                <1 RK_PA1 RK_FUNC_GPIO &pcfg_pull_default>,
+                <1 RK_PA2 RK_FUNC_GPIO &pcfg_pull_default>,
+                <1 RK_PA4 RK_FUNC_GPIO &pcfg_pull_default>,
+                <1 RK_PA5 RK_FUNC_GPIO &pcfg_pull_default>;
+        };
+    };
 };
 
 &sdmmc {
@@ -389,16 +413,19 @@
 };
 
 &sdio {
-        cap-mmc-highspeed;
-        no-sd;
-        no-mmc;
-        ignore-pm-notify;
-        keep-power-in-suspend;
-        non-removable;
-        cap-sdio-irq;
-        clock-freq-min-max = <200000 37500000>;
-        max-frequency = <37500000>;
-        status = "okay";
+	rockchip,no-dmaengine;
+	max-frequency = <37500000>;
+	bus-width = <4>;
+	cap-sd-highspeed;
+	cap-sdio-irq;
+	supports-sdio;
+	disable-wp;
+	ignore-pm-notify;
+	keep-power-in-suspend;
+	pinctrl-names = "default";
+	pinctrl-0 = <&sdio_cmd &sdio_clk &sdio_bus4>;
+	non-removable;
+	status = "okay";
 };
 
 &u2phy {

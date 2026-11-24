@@ -1,11 +1,17 @@
-/* Copyright (c) 2008 -2014 Espressif System.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
+/*
+ *  Copyright (c) 2009- 2014 Espressif System.
  *
  *    Serial Interconnctor Protocol
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 #ifndef _ESP_SIP_H
@@ -116,7 +122,6 @@ struct esp_sip {
 };
 
 int sip_rx(struct esp_pub * epub);
-void reset_signal_count(void);
 //int sip_download_fw(struct esp_sip *sip, u32 load_addr, u32 boot_addr);
 
 
@@ -160,15 +165,14 @@ bool mod_support_no_txampdu(void);
 
 bool mod_support_no_rxampdu(void);
 
+bool mod_support_disable_ht(void);
+
+u8 mod_support_ht_mcs_mask(void);
+
 void mod_support_no_txampdu_set(bool value);
 
 #ifdef FPGA_DEBUG
 int sip_send_bootup(struct esp_sip *sip);
 #endif /* FPGA_DEBUG */
 void sip_debug_show(struct esp_sip *sip);
-#endif
-
-#ifndef FAST_TX_STATUS
-void sip_txdoneq_process(struct esp_sip *sip,
-                         struct sip_evt_tx_report *tx_report);
 #endif

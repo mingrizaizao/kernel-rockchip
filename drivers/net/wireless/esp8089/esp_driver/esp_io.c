@@ -226,7 +226,7 @@ int sif_ack_target_read_err(struct esp_pub *epub)
 	return ret;
 }
 
-int sif_hda_io_enable(struct esp_pub *epub)
+int sif_had_io_enable(struct esp_pub *epub)
 {
         u32 *p_tbuf = NULL;
 	int ret;

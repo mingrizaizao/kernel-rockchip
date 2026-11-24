@@ -1,11 +1,17 @@
-/* Copyright (c) 2008 -2014 Espressif System.
- *
- * This program is free software; you can redistribute it and/or modify
- * it under the terms of the GNU General Public License version 2 as
- * published by the Free Software Foundation.
- *
+/*
+ * Copyright (c) 2011-2014 Espressif System.
  *
  *   wlan device header file
+ *
+ * This program is free software; you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation; either version 2 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
  */
 
 #ifndef _ESP_PUB_H_
@@ -17,12 +23,24 @@
 #include <linux/sched.h>
 #include <net/mac80211.h>
 #include <net/cfg80211.h>
+#include <linux/nl80211.h>
 #include <linux/version.h>
 #include "sip2_common.h"
 
 // to support kernel < 2.6.28 there's no ieee80211_sta
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 28))
 #include <net/wireless.h>
+#endif
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(4, 9, 0))
+enum ieee80211_band {
+    IEEE80211_BAND_2GHZ = NL80211_BAND_2GHZ,
+    IEEE80211_BAND_5GHZ = NL80211_BAND_5GHZ,
+    IEEE80211_BAND_60GHZ = NL80211_BAND_60GHZ,
+
+    /* keep last */
+    IEEE80211_NUM_BANDS
+};
 #endif
 
 enum esp_sdio_state{
@@ -48,17 +66,6 @@ struct esp_tx_tid {
 	u16 ssn;
 };
 
-enum sta_state {
-	ESP_STA_STATE_NORM,
-	ESP_STA_STATE_WAIT,
-	ESP_STA_STATE_LOST,
-};
-	
-
-#define ESP_LOSS_COUNT_MAX	5
-#define ESP_ND_TIME_REMAIN_MAX	599  /* ~300s at the 500ms monitor interval */
-#define ESP_ND_TIME_REMAIN_MIN	0    /* immediate */
-#define ESP_ND_TIMER_INTERVAL	500  /* 500ms */
 #define WME_NUM_TID 16
 struct esp_node {
         struct esp_tx_tid tid[WME_NUM_TID];
@@ -72,9 +79,6 @@ struct esp_node {
 #endif
 	u8 ifidx;
 	u8 index;
-	atomic_t loss_count;
-	atomic_t time_remain;
-	atomic_t sta_state;
 };
 
 #define WME_AC_BE 2
@@ -92,12 +96,10 @@ struct llc_snap_hdr {
 
 struct esp_vif {
 	struct esp_pub *epub;
-		struct ieee80211_vif *vif;
-u8 index;
+	u8 index;
 	u32 beacon_interval;
 	bool ap_up;
 	struct timer_list beacon_timer;
-	struct timer_list nulldata_timer; /* gc use this, too */
 };
 
 /* WLAN related, mostly... */
@@ -117,7 +119,7 @@ typedef struct esp_wl {
 	atomic_t tkip_key_set;
 
         /* so far only 2G band */
-        struct ieee80211_supported_band sbands[NUM_NL80211_BANDS];
+        struct ieee80211_supported_band sbands[IEEE80211_NUM_BANDS];
 
         unsigned long flags;
         atomic_t off;
@@ -196,8 +198,6 @@ struct esp_pub {
 
         //u8 bssid[ETH_ALEN];
         u8 mac_addr[ETH_ALEN];
-	u8 master_addr[ETH_ALEN];
-	u8 master_ifidx;
 
         u32 rx_filter;
         unsigned long scan_permit;
@@ -244,8 +244,6 @@ struct esp_node * esp_get_node_by_addr(struct esp_pub * epub, const u8 *addr);
 struct esp_node * esp_get_node_by_index(struct esp_pub * epub, u8 index);
 int esp_get_empty_rxampdu(struct esp_pub * epub, const u8 *addr, u8 tid);
 int esp_get_exist_rxampdu(struct esp_pub * epub, const u8 *addr, u8 tid);
-
-void esp_sendup_deauth(struct esp_pub *epub, u8 *sta_addr);
 
 #ifdef TEST_MODE
 int test_init_netlink(struct esp_sip *sip);

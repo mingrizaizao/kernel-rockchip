@@ -271,7 +271,7 @@ struct esp_init_table_elem esp_init_table[MAX_ATTR_NUM] = {
 	
 };
 
-int esp_atoi(char *str)
+static int esp_atoi(char *str)
 {
         int num = 0;
         int ng_flag = 0;
@@ -288,17 +288,17 @@ int esp_atoi(char *str)
         return ng_flag ? 0-num : num;
 }
 
-void show_esp_init_table(struct esp_init_table_elem *econf)
-{
-	int i;
-	for (i = 0; i < MAX_ATTR_NUM; i++)
-		if (esp_init_table[i].offset > -1)
-			esp_dbg(ESP_DBG_ERROR, "%s: esp_init_table[%d] attr[%s] offset[%d] value[%d]\n", 
-				__FUNCTION__, i,
-				esp_init_table[i].attr,
-				esp_init_table[i].offset,
-				esp_init_table[i].value);
-}
+// void show_esp_init_table(struct esp_init_table_elem *econf)
+// {
+// 	int i;
+// 	for (i = 0; i < MAX_ATTR_NUM; i++)
+// 		if (esp_init_table[i].offset > -1)
+// 			esp_dbg(ESP_DBG_ERROR, "%s: esp_init_table[%d] attr[%s] offset[%d] value[%d]\n", 
+// 				__FUNCTION__, i,
+// 				esp_init_table[i].attr,
+// 				esp_init_table[i].offset,
+// 				esp_init_table[i].value);
+// }
 	
 int request_init_conf(void)
 {

@@ -54,8 +54,6 @@ struct esp_init_table_elem {
 };
 
 int request_init_conf(void);
-int esp_atoi(char *str);
-void show_esp_init_table(struct esp_init_table_elem *econf);
 void fix_init_data(u8 *init_data_buf, int buf_size);
 
 

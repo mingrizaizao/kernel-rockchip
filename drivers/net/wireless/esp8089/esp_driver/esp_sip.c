@@ -52,12 +52,6 @@ static int old_signal = -35;
 static int avg_signal = 0;
 static int signal_loop = 0;
 
-void reset_signal_count(void)
-{
-	signal_loop = 0;
-	avg_signal = 0;
-}
-
 struct esp_mac_prefix esp_mac_prefix_table[] = {
 	{0,{0x18,0xfe,0x34}},
 	{1,{0xac,0xd0,0x74}},
@@ -1177,7 +1171,7 @@ sip_txdoneq_process(struct esp_sip *sip, struct sip_evt_tx_report *tx_report)
                                 tx_info->status.rates[1].idx = -1;
 #endif /* HOST_RC */
 
-				ieee80211_tx_status_irqsafe(epub->hw, skb);
+                                ieee80211_tx_status(epub->hw, skb);
                                 matchs++;
                                 atomic_dec(&sip->pending_tx_status);
                                 STRACE_RX_TXSTATUS_INC();
@@ -1202,7 +1196,7 @@ sip_txdoneq_process(struct esp_sip *sip)
         struct esp_pub *epub = sip->epub;
         struct sk_buff *skb;
         while ((skb = skb_dequeue(&epub->txdoneq))) {
-			ieee80211_tx_status_irqsafe(epub->hw, skb);
+                ieee80211_tx_status_ni(epub->hw, skb);
         }
 }
 #endif
@@ -1335,7 +1329,7 @@ _exit:
 #ifndef FAST_TX_NOWAIT 
         skb_queue_tail(&sip->epub->txdoneq, skb);
 #else
-		ieee80211_tx_status_irqsafe(sip->epub->hw, skb);
+        ieee80211_tx_status(sip->epub->hw, skb);
 #endif
 }
 #endif /* FAST_TX_STATUS */
@@ -1591,29 +1585,6 @@ static int esp_add_wmm(struct sk_buff *skb)
 }
 #endif /* NO_WMM_DUMMY */
 
-/* Refresh the AP-side station liveness timer for every received frame. */
-static int update_sta_time_remain(struct esp_pub *epub, struct sk_buff *skb)
-{
-	struct ieee80211_hdr *wh;
-	struct esp_node *enode;
-
-	if (!epub || !skb || skb->len < sizeof(*wh))
-		return -EINVAL;
-
-	if (epub->master_ifidx == ESP_PUB_MAX_VIF)
-		return 0;
-
-	wh = (struct ieee80211_hdr *)skb->data;
-	enode = esp_get_node_by_addr(epub, wh->addr2);
-	if (enode && enode->ifidx == epub->master_ifidx) {
-		atomic_set(&enode->time_remain, ESP_ND_TIME_REMAIN_MAX);
-		atomic_set(&enode->sta_state, ESP_STA_STATE_NORM);
-		atomic_set(&enode->loss_count, 0);
-	}
-
-	return 0;
-}
-
 /*  parse mac_rx_ctrl and return length */
 static int sip_parse_mac_rx_info(struct esp_sip *sip, struct esp_mac_rx_ctrl * mac_ctrl, struct sk_buff *skb)
 {
@@ -1659,7 +1630,7 @@ static int sip_parse_mac_rx_info(struct esp_sip *sip, struct esp_mac_rx_ctrl * m
 #undef ESP_RSSI_MIN_RSSI
 #endif /* !NEW_KERNEL && KERNEL_35*/
         rx_status->antenna = 0;  /* one antenna for now */
-	rx_status->band = NL80211_BAND_2GHZ;
+        rx_status->band = IEEE80211_BAND_2GHZ;
         rx_status->flag = RX_FLAG_DECRYPTED | RX_FLAG_MMIC_STRIPPED;
         if (mac_ctrl->sig_mode) {
             // 2.6.27 has RX_FLAG_RADIOTAP in enum mac80211_rx_flags in include/net/mac80211.h
@@ -1700,8 +1671,6 @@ static int sip_parse_mac_rx_info(struct esp_sip *sip, struct esp_mac_rx_ctrl * m
 
         do {
                 struct ieee80211_hdr * wh = (struct ieee80211_hdr *)((u8 *)skb->data);
-
-		update_sta_time_remain(sip->epub, skb);
 
 #ifndef NO_WMM_DUMMY
 		if (ieee80211_is_mgmt(wh->frame_control))
@@ -2242,6 +2211,8 @@ sip_poll_bootup_event(struct esp_sip *sip)
 
 	if(sif_get_ate_config() == 0){
 		ret = esp_register_mac80211(sip->epub);
+		printk("esp8089: %s esp_register_mac80211 returned %d\n",
+		       __func__, ret);
 	}
 
 #ifdef TEST_MODE
@@ -2384,10 +2355,6 @@ void sip_tx_data_pkt_enqueue(struct esp_pub *epub, struct sk_buff *skb)
 		}
 
 	}
-	if (sif_get_ate_config() == 0)
-		ieee80211_queue_work(epub->hw, &epub->tx_work);
-	else
-		queue_work(epub->esp_wkq, &epub->tx_work);
 }
 
 #ifdef FPGA_TXDATA

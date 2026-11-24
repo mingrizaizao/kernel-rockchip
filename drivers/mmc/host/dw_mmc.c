@@ -3242,6 +3242,17 @@ static void dw_mci_init_dma(struct dw_mci *host)
 	int addr_config;
 	struct device *dev = host->dev;
 
+	
+	/*
+	 * Rockchip boards use this DT property to opt specific DW-MMC hosts
+	 * out of DMA entirely. Honor it before probing either the internal
+	 * IDMAC or an external engine so affected SDIO links can stay in PIO.
+	 */
+	if (device_property_present(dev, "rockchip,no-dmaengine"))
+		goto no_dma;
+
+
+
 	/*
 	* Check tansfer mode from HCON[17:16]
 	* Clear the ambiguous description of dw_mmc databook:
